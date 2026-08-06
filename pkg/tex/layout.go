@@ -66,7 +66,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 		}
 
 		if n.IsOperator {
-			pad := 0.15 * scale
+			pad := 0.08 * scale
 			gBox := &Box{
 				Type:     "group",
 				Width:    w + 2*pad,
@@ -135,7 +135,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 
 		if supBox != nil {
 			supBox.X = baseBox.Width
-			supBox.Y = -(baseBox.Height * 0.5) // shift up
+			supBox.Y = -(baseBox.Height * 0.45)
 			gBox.Children = append(gBox.Children, supBox)
 			if supH := -supBox.Y + supBox.Height; supH > gBox.Height {
 				gBox.Height = supH
@@ -144,7 +144,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 
 		if subBox != nil {
 			subBox.X = baseBox.Width
-			subBox.Y = baseBox.Depth * 0.5 // shift down
+			subBox.Y = baseBox.Depth * 0.45
 			gBox.Children = append(gBox.Children, subBox)
 			if subD := subBox.Y + subBox.Depth; subD > gBox.Depth {
 				gBox.Depth = subD
@@ -158,7 +158,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 		denBox := e.BuildLayout(n.Den, scale*0.85)
 
 		ruleThickness := 0.06 * scale
-		padding := 0.12 * scale
+		padding := 0.05 * scale
 
 		maxW := math.Max(numBox.Width, denBox.Width) + 2*padding
 
@@ -194,21 +194,21 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 
 	case *SqrtNode:
 		contentBox := e.BuildLayout(n.Content, scale)
-		padding := 0.1 * scale
+		padding := 0.05 * scale
 		ruleThickness := 0.06 * scale
 
-		w := contentBox.Width + 0.5*scale + padding
-		h := contentBox.Height + 0.2*scale
+		w := contentBox.Width + 0.45*scale + padding
+		h := contentBox.Height + 0.15*scale
 		d := contentBox.Depth
 
-		contentBox.X = 0.45 * scale
+		contentBox.X = 0.4*scale + padding
 		contentBox.Y = 0
 
 		sqrtSymBox := &Box{
 			Type:       "char",
 			X:          0,
 			Y:          0,
-			Width:      0.45 * scale,
+			Width:      0.4 * scale,
 			Height:     h,
 			Depth:      d,
 			Text:       "\\sqrt",
@@ -218,7 +218,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 
 		overBarBox := &Box{
 			Type:   "rule",
-			X:      0.42 * scale,
+			X:      0.38*scale + padding,
 			Y:      -h,
 			Width:  contentBox.Width + padding,
 			Height: ruleThickness,
@@ -243,12 +243,12 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 		}
 
 		opScale := scale * 1.3
-		opW := 0.85 * scale
+		opW := 0.75 * scale
 		if glyph, ok := GetGlyphInfo(n.Op); ok {
 			opW = (glyph.Width / 1000.0) * opScale
 		}
 
-		opH := 0.85 * scale
+		opH := 0.75 * scale
 		opD := 0.25 * scale
 
 		opBox := &Box{
@@ -288,14 +288,14 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 
 		if overBox != nil {
 			overBox.X = (maxW - overBox.Width) / 2
-			overBox.Y = -(opH + 0.12*scale + overBox.Depth)
+			overBox.Y = -(opH + 0.08*scale + overBox.Depth)
 			children = append(children, overBox)
 			totalH = -overBox.Y + overBox.Height
 		}
 
 		if underBox != nil {
 			underBox.X = (maxW - underBox.Width) / 2
-			underBox.Y = opD + 0.12*scale + underBox.Height
+			underBox.Y = opD + 0.08*scale + underBox.Height
 			children = append(children, underBox)
 			totalD = underBox.Y + underBox.Depth
 		}
@@ -314,7 +314,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 		h := innerBox.Height
 		d := innerBox.Depth
 
-		delimW := 0.35 * scale
+		delimW := 0.28 * scale
 		children := []*Box{}
 		curX := 0.0
 
@@ -378,8 +378,8 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 			return e.BuildLayout(&DelimNode{Left: "{", Right: "", Inner: &plainMatrix}, scale)
 		}
 
-		cellPaddingX := 0.25 * scale
-		cellPaddingY := 0.2 * scale
+		cellPaddingX := 0.15 * scale
+		cellPaddingY := 0.12 * scale
 
 		numRows := len(n.Rows)
 		if numRows == 0 {
@@ -470,10 +470,10 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 
 		accBox := &Box{
 			Type:       "char",
-			X:          (targetBox.Width - 0.3*scale) / 2,
-			Y:          -(targetBox.Height + 0.1*scale),
-			Width:      0.3 * scale,
-			Height:     0.2 * scale,
+			X:          (targetBox.Width - 0.25*scale) / 2,
+			Y:          -(targetBox.Height + 0.08*scale),
+			Width:      0.25 * scale,
+			Height:     0.15 * scale,
 			Depth:      0,
 			Text:       accText,
 			FontFamily: "symbol",
@@ -483,7 +483,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 		return &Box{
 			Type:     "group",
 			Width:    targetBox.Width,
-			Height:   targetBox.Height + 0.3*scale,
+			Height:   targetBox.Height + 0.25*scale,
 			Depth:    targetBox.Depth,
 			Scale:    scale,
 			Children: []*Box{targetBox, accBox},
@@ -499,7 +499,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 		}
 
 	case *TextNode:
-		w := float64(len(n.Text)) * 0.55 * scale
+		w := float64(len(n.Text)) * 0.5 * scale
 		return &Box{
 			Type:       "text",
 			Width:      w,

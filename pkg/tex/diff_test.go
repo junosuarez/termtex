@@ -170,10 +170,13 @@ func extractSymbols(texStr string) []string {
 				start++
 			}
 			if start > i+1 {
-				syms = append(syms, string(runes[i+1:start]))
+				macro := string(runes[i:start])
+				if macro != "\\begin" && macro != "\\end" && macro != "\\frac" && macro != "\\text" {
+					syms = append(syms, macro)
+				}
 				i = start - 1
 			}
-		} else if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || strings.ContainsRune("+-=/*", ch) {
+		} else if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || strings.ContainsRune("+-=/*()[]{}", ch) {
 			syms = append(syms, string(ch))
 		}
 	}
