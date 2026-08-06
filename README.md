@@ -1,8 +1,8 @@
 # termtex
 
-`termtex` is a lightweight, pure Go CLI tool that renders LaTeX math expressions and mixed Markdown documents directly into the terminal window using vector SVG typesetting and the **Kitty Graphics Protocol**.
+`termtex` is a lightweight CLI tool and Go package that renders LaTeX math expressions and mixed Markdown documents directly into the terminal window using vector SVG typesetting and the **Kitty Graphics Protocol**.
 
-It supports both **inline math** (`$ ... $` or `\( ... \)`) and **block math** (`$$ ... $$` or `\[ ... \]`) interspersed with plain text, without requiring MathJax or heavy LaTeX installations.
+It supports both **inline math** (`$ ... $` or `\( ... \)`) and **block math** (`$$ ... $$` or `\[ ... \]`) interspersed with plain text, generating publication-quality Computer Modern TeX typography.
 
 ![Quadratic Formula](assets/quadratic.png)
 
@@ -11,8 +11,8 @@ It supports both **inline math** (`$ ... $` or `\( ... \)`) and **block math** (
 ## ✨ Features
 
 - **Mixed Document Rendering**: Interleave plain text, inline equations (`$V(S_t)$`), and centered block equations (`$$\sum_{i=1}^n x_i$$`).
-- **Pure Go Parser & Typesetter**: Built-in recursive-descent TeX parser and box layout engine.
-- **Kitty Graphics Protocol**: Crisp, pixel-perfect inline and block math images rendered directly in Kitty, Ghostty, WezTerm, and compatible terminals.
+- **Computer Modern TeX Vector Fonts**: Vector glyph paths (`<path d="...">`) derived from MathJax for identical, pixel-perfect TeX typography.
+- **Kitty Graphics Protocol**: Crisp inline and block math images rendered directly in Kitty, Ghostty, WezTerm, and compatible terminals.
 - **Vector SVG & PNG Export**: Output cleanly to `.svg` or `.png` files.
 - **Unicode Terminal Fallback**: Terminal text fallback mode (`-f text`) for standard environments.
 - **Standard Math Subset**:
@@ -89,6 +89,15 @@ termtex -o formula.png "\sqrt[3]{x^2+y^2}"
 
 ---
 
+## 🙏 Attribution & Credits
+
+This project's TeX vector glyph data and typesetting lineage are deeply indebted to **[MathJax](https://www.mathjax.org/)** and **The MathJax Consortium**.
+
+- Vector glyph paths and TeX Computer Modern font path definitions are derived from [mathjax-full](https://github.com/mathjax/MathJax-src).
+- Huge gratitude to the MathJax team and contributors for their pioneering work in open-source mathematical web typesetting!
+
+---
+
 ## 📄 License
 
-This project is dedicated to the public domain under the [CC0 1.0 Universal Public Domain Dedication](LICENSE).
+Licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for full details.
