@@ -114,7 +114,7 @@ func main() {
 			return
 		}
 
-		cmd := exec.Command("rsvg-convert", "-f", "png", "-o", outputFile)
+		cmd := exec.Command("rsvg-convert", "-f", "png", "-z", "3.0", "-o", outputFile)
 		cmd.Stdin = strings.NewReader(svgString)
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -149,28 +149,27 @@ func containsDocumentDelimiters(s string) bool {
 }
 
 func printHelp() {
-	helpText := `termtex - LaTeX Math & Mixed Markdown Document Renderer for Terminals
+	helpText := `termtex - LaTeX Math & Document Terminal Renderer
 
 USAGE:
-  termtex [options] "<latex_expression_or_markdown_text>"
-  termtex [options] <markdown_file.md>
-  echo "Where $x$ is..." | termtex
+  termtex [flags] "<latex_expression>"
+  termtex [flags] <file.md>
+  cat document.md | termtex [flags]
 
 EXAMPLES:
   termtex "\frac{1}{x^2+1}"
-  termtex "Where $V(S_t)$ is the estimated value of state $S_t$."
-  termtex "The formula is: $$ V(S_t) \leftarrow V(S_t) + \alpha[R_{t+1} + \gamma V(S_{t+1}) - V(S_t)] $$"
-  termtex document.md
+  termtex "Where $V(S_t)$ is the state value."
+  termtex -o quadratic.png "x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"
 
-OPTIONS:
-  -o, --output <file>    Save rendered output to file (.svg or .png)
-  -f, --format <fmt>     Output format: auto, kitty, svg, text (default: auto)
-  -c, --color <hex>      Foreground color (default: "#cdd6f4")
-  -bg, --background <c>  Background color (default: "transparent")
-  -s, --size <float>     Font size in pixels (default: 32.0)
-  -p, --padding <float>  Padding around math in pixels (default: 16.0)
-  -d, --display          Display mode (default: true)
-  -h, --help             Show this help message
+FLAGS:
+  -o, --output <file>     Save output to file (.svg or .png)
+  -f, --format <format>   Output format: auto, kitty, svg, png, text (default "auto")
+  -c, --color <hex>       Foreground text color (default "#cdd6f4")
+  -bg, --background <hex> Background color (default "transparent")
+  -s, --size <pixels>     Font size in pixels (default 32)
+  -p, --padding <pixels>  Canvas padding in pixels (default 16)
+  -d, --display           Enable display mode (default true)
+  -h, --help              Show this help message
 `
 	fmt.Print(helpText)
 }

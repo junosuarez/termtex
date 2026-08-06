@@ -14,7 +14,7 @@ import (
 
 // RenderToTerminal renders SVG to PNG and displays it as a block image in terminal.
 func RenderToTerminal(svgContent string, writer io.Writer) error {
-	pngBytes, err := convertSVGToPNG(svgContent)
+	pngBytes, err := convertSVGToPNG(svgContent, 3.5)
 	if err != nil {
 		return err
 	}
@@ -28,7 +28,7 @@ func RenderToTerminal(svgContent string, writer io.Writer) error {
 
 // RenderInlineToTerminal renders SVG to PNG and displays it inline at current cursor position.
 func RenderInlineToTerminal(svgContent string, writer io.Writer) error {
-	pngBytes, err := convertSVGToPNG(svgContent)
+	pngBytes, err := convertSVGToPNG(svgContent, 2.0)
 	if err != nil {
 		return err
 	}
@@ -48,9 +48,14 @@ func RenderInlineToTerminal(svgContent string, writer io.Writer) error {
 	return printWithIcat(pngBytes)
 }
 
-// convertSVGToPNG calls rsvg-convert to turn SVG string into PNG bytes.
-func convertSVGToPNG(svgContent string) ([]byte, error) {
-	cmd := exec.Command("rsvg-convert", "-f", "png")
+// convertSVGToPNG calls rsvg-convert to turn SVG string into PNG bytes with zoom scaling.
+func convertSVGToPNG(svgContent string, zoom float64) ([]byte, error) {
+	if zoom <= 0 {
+		zoom = 3.5
+	}
+	zoomStr := fmt.Sprintf("%.2f", zoom)
+
+	cmd := exec.Command("rsvg-convert", "-f", "png", "-z", zoomStr)
 	cmd.Stdin = bytes.NewReader([]byte(svgContent))
 
 	var out bytes.Buffer
