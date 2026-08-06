@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"termtex/pkg/doc"
 	"termtex/pkg/render"
 	"termtex/pkg/tex"
 )
@@ -48,32 +49,33 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Determine TeX input expression
-	var texInput string
+	var inputStr string
 	args := flag.Args()
 	if len(args) > 0 {
-		texInput = strings.Join(args, " ")
+		if _, err := os.Stat(args[0]); err == nil {
+			content, err := os.ReadFile(args[0])
+			if err == nil {
+				inputStr = string(content)
+			} else {
+				inputStr = strings.Join(args, " ")
+			}
+		} else {
+			inputStr = strings.Join(args, " ")
+		}
 	} else {
-		// Read from STDIN
 		stat, err := os.Stdin.Stat()
 		if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
 			bytes, err := io.ReadAll(os.Stdin)
 			if err == nil {
-				texInput = strings.TrimSpace(string(bytes))
+				inputStr = string(bytes)
 			}
 		}
 	}
 
-	if strings.TrimSpace(texInput) == "" {
-		fmt.Fprintln(os.Stderr, "Error: No LaTeX input provided.")
-		fmt.Fprintln(os.Stderr, "Usage: termtex \"\\frac{1}{x^2+1}\" or echo \"\\int_0^1 x dx\" | termtex")
-		os.Exit(1)
-	}
-
-	// Parse TeX into AST
-	astNode, err := tex.Parse(texInput)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing LaTeX: %v\n", err)
+	inputStr = strings.TrimSpace(inputStr)
+	if inputStr == "" {
+		fmt.Fprintln(os.Stderr, "Error: No input provided.")
+		fmt.Fprintln(os.Stderr, "Usage: termtex \"\\frac{1}{x^2+1}\" or termtex doc.md or echo \"Where $x$ is...\" | termtex")
 		os.Exit(1)
 	}
 
@@ -85,14 +87,27 @@ func main() {
 		DisplayMode: displayMode,
 	}
 
-	// Generate SVG
+	if containsDocumentDelimiters(inputStr) {
+		err := doc.RenderDocument(os.Stdout, inputStr, opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error rendering document: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	astNode, err := tex.Parse(inputStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing LaTeX: %v\n", err)
+		os.Exit(1)
+	}
+
 	svgString, err := tex.RenderSVG(astNode, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error rendering SVG: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Handle direct file output
 	if outputFile != "" {
 		if strings.HasSuffix(outputFile, ".svg") {
 			err := os.WriteFile(outputFile, []byte(svgString), 0644)
@@ -104,7 +119,6 @@ func main() {
 			return
 		}
 
-		// Convert to PNG for file output
 		cmd := exec.Command("rsvg-convert", "-f", "png", "-o", outputFile)
 		cmd.Stdin = strings.NewReader(svgString)
 		cmd.Stderr = os.Stderr
@@ -116,7 +130,6 @@ func main() {
 		return
 	}
 
-	// Handle output format selection
 	switch strings.ToLower(format) {
 	case "svg":
 		fmt.Print(svgString)
@@ -125,7 +138,6 @@ func main() {
 	case "kitty", "auto":
 		err := render.RenderToTerminal(svgString, os.Stdout)
 		if err != nil {
-			// Fallback to text rendering if terminal graphics failed
 			fmt.Fprintln(os.Stderr, "Warning: Kitty graphics protocol failed, falling back to text:")
 			fmt.Println(render.RenderASCII(astNode))
 		}
@@ -135,23 +147,28 @@ func main() {
 	}
 }
 
+func containsDocumentDelimiters(s string) bool {
+	return strings.Contains(s, "$") || strings.Contains(s, `\[`) || strings.Contains(s, `\(`)
+}
+
 func printHelp() {
-	helpText := `termtex - LaTeX Math Renderer for Kitty & Terminals
+	helpText := `termtex - LaTeX Math & Mixed Markdown Document Renderer for Terminals
 
 USAGE:
-  termtex [options] "<latex_expression>"
-  echo "<latex_expression>" | termtex
+  termtex [options] "<latex_expression_or_markdown_text>"
+  termtex [options] <markdown_file.md>
+  echo "Where $x$ is..." | termtex
 
 EXAMPLES:
   termtex "\frac{1}{x^2+1}"
-  termtex "\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}"
-  termtex "\begin{pmatrix} a & b \\ c & d \end{pmatrix}"
-  termtex -o formula.svg "\sum_{i=1}^n x_i"
+  termtex "Where $V(S_t)$ is the estimated value of state $S_t$."
+  termtex "The formula is: $$ V(S_t) \leftarrow V(S_t) + \alpha[R_{t+1} + \gamma V(S_{t+1}) - V(S_t)] $$"
+  termtex document.md
 
 OPTIONS:
   -o, --output <file>    Save rendered output to file (.svg or .png)
   -f, --format <fmt>     Output format: auto, kitty, svg, text (default: auto)
-  -c, --color <color>    Foreground color (default: "#cdd6f4")
+  -c, --color <hex>      Foreground color (default: "#cdd6f4")
   -bg, --background <c>  Background color (default: "transparent")
   -s, --size <float>     Font size in pixels (default: 32.0)
   -p, --padding <float>  Padding around math in pixels (default: 16.0)

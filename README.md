@@ -1,8 +1,8 @@
 # termtex
 
-`termtex` is a lightweight, pure Go CLI tool that renders LaTeX math expressions directly into the terminal window using vector SVG typesetting and the **Kitty Graphics Protocol**.
+`termtex` is a lightweight, pure Go CLI tool that renders LaTeX math expressions and mixed Markdown documents directly into the terminal window using vector SVG typesetting and the **Kitty Graphics Protocol**.
 
-It focuses on standard mathematical equations, fractions, square roots, integrals, summations, matrices, and piecewise cases without requiring MathJax or heavy LaTeX installation.
+It supports both **inline math** (`$ ... $` or `\( ... \)`) and **block math** (`$$ ... $$` or `\[ ... \]`) interspersed with plain text, without requiring MathJax or heavy LaTeX installations.
 
 ![Quadratic Formula](assets/quadratic.png)
 
@@ -10,8 +10,9 @@ It focuses on standard mathematical equations, fractions, square roots, integral
 
 ## ✨ Features
 
+- **Mixed Document Rendering**: Interleave plain text, inline equations (`$V(S_t)$`), and centered block equations (`$$\sum_{i=1}^n x_i$$`).
 - **Pure Go Parser & Typesetter**: Built-in recursive-descent TeX parser and box layout engine.
-- **Kitty Graphics Protocol**: Crisp, pixel-perfect math rendering directly in Kitty, Ghostty, WezTerm, and compatible terminals.
+- **Kitty Graphics Protocol**: Crisp, pixel-perfect inline and block math images rendered directly in Kitty, Ghostty, WezTerm, and compatible terminals.
 - **Vector SVG & PNG Export**: Output cleanly to `.svg` or `.png` files.
 - **Unicode Terminal Fallback**: Terminal text fallback mode (`-f text`) for standard environments.
 - **Standard Math Subset**:
@@ -69,31 +70,22 @@ go build -o termtex main.go
 ## 🛠️ Usage
 
 ```bash
-# Render TeX equation directly to terminal
+# Render a Markdown file containing inline & block math
+termtex document.md
+
+# Render mixed text with inline math
+termtex "Where \$V(S_t)\$ is the value of state \$S_t\$."
+
+# Render a single TeX expression
 termtex "\frac{1}{x^2+1}"
 
-# Pipe LaTeX from STDIN
-echo "\sum_{i=1}^n x_i" | termtex
+# Pipe Markdown from STDIN
+echo "Formula: \$\$ \int_0^1 x dx \$\$" | termtex
 
 # Save SVG or PNG output to file
 termtex -o formula.svg "\frac{a}{b}"
 termtex -o formula.png "\sqrt[3]{x^2+y^2}"
-
-# Render Unicode text fallback
-termtex -f text "\int_0^\infty e^{-x^2} dx"
 ```
-
-### CLI Flags
-
-| Flag | Description | Default |
-| --- | --- | --- |
-| `-o, --output <file>` | Save rendered output to `.svg` or `.png` file | `""` |
-| `-f, --format <fmt>` | Output format: `auto`, `kitty`, `svg`, `png`, `text` | `"auto"` |
-| `-c, --color <hex>` | Math foreground color | `"#cdd6f4"` |
-| `-bg, --background <c>` | Canvas background color | `"transparent"` |
-| `-s, --size <float>` | Base font size in pixels | `32.0` |
-| `-p, --padding <float>` | Canvas padding around equation | `16.0` |
-| `-d, --display` | Enable display mode layout | `true` |
 
 ---
 
