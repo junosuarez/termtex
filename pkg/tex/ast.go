@@ -1,34 +1,34 @@
 package tex
 
-// Node represents a TeX math layout node in the AST.
+// Node represents an AST node in the parsed LaTeX math expression.
 type Node interface {
-	isNode()
+	node()
 }
 
-// GroupNode represents a sequence of nodes (e.g. {a + b}).
+// CharNode represents a single character or symbol (letter, digit, operator).
+type CharNode struct {
+	Symbol     string
+	FontFamily string // "math-italic", "math-upright", "math-bold", "symbol", "math-bb", "math-cal"
+	IsOperator bool
+}
+
+func (c *CharNode) node() {}
+
+// GroupNode represents a sequence of AST nodes grouped together.
 type GroupNode struct {
 	Children []Node
 }
 
-func (GroupNode) isNode() {}
+func (g *GroupNode) node() {}
 
-// CharNode represents a single math character or symbol.
-type CharNode struct {
-	Symbol     string // The character or TeX macro name (e.g. "a", "1", "\alpha", "\int")
-	FontFamily string // "math-italic", "math-upright", "math-bold", "symbol"
-	IsOperator bool
-}
-
-func (CharNode) isNode() {}
-
-// SubSupNode represents a base node with optional subscript and superscript.
+// SubSupNode represents a base expression with subscript and/or superscript.
 type SubSupNode struct {
 	Base Node
-	Sub  Node // Subscript (or nil)
-	Sup  Node // Superscript (or nil)
+	Sub  Node
+	Sup  Node
 }
 
-func (SubSupNode) isNode() {}
+func (s *SubSupNode) node() {}
 
 // FracNode represents a fraction \frac{num}{den}.
 type FracNode struct {
@@ -36,61 +36,69 @@ type FracNode struct {
 	Den Node
 }
 
-func (FracNode) isNode() {}
+func (f *FracNode) node() {}
 
-// SqrtNode represents a square root or N-th root \sqrt[opt]{content}.
+// BinomNode represents a binomial coefficient \binom{n}{k}.
+type BinomNode struct {
+	Top    Node
+	Bottom Node
+}
+
+func (b *BinomNode) node() {}
+
+// SqrtNode represents a square or n-th root \sqrt[index]{content}.
 type SqrtNode struct {
-	Index   Node // Optional index for n-th root
+	Index   Node
 	Content Node
 }
 
-func (SqrtNode) isNode() {}
+func (s *SqrtNode) node() {}
 
-// BigOpNode represents a large operator (\sum, \int, \prod, \lim) with limits.
+// BigOpNode represents a large operator (\sum, \prod, \int) with limits above/below.
 type BigOpNode struct {
-	Op    string // "\sum", "\int", "\prod", "\lim", etc.
-	Under Node   // Lower limit / subscript
-	Over  Node   // Upper limit / superscript
+	Op    string
+	Under Node
+	Over  Node
 }
 
-func (BigOpNode) isNode() {}
+func (b *BigOpNode) node() {}
 
-// DelimNode represents auto-sized delimiters \left( content \right).
+// DelimNode represents delimiters surrounding an expression \left( ... \right).
 type DelimNode struct {
-	Left  string // "(", "[", "{", "|", "\langle", etc.
-	Right string // ")", "]", "}", "|", "\rangle", etc.
+	Left  string
+	Right string
 	Inner Node
 }
 
-func (DelimNode) isNode() {}
+func (d *DelimNode) node() {}
 
-// MatrixNode represents a matrix environment (\begin{matrix}...\end{matrix}, pmatrix, bmatrix, cases, etc.).
+// MatrixNode represents a grid environment (\begin{matrix}, \begin{pmatrix}, \begin{cases}).
 type MatrixNode struct {
-	Kind string     // "matrix", "pmatrix", "bmatrix", "vmatrix", "cases"
-	Rows [][]Node   // Grid of cell nodes
+	Kind string // "matrix", "pmatrix", "bmatrix", "cases"
+	Rows [][]Node
 }
 
-func (MatrixNode) isNode() {}
+func (m *MatrixNode) node() {}
 
-// AccNode represents an accent over a node (\hat{x}, \vec{v}, \bar{z}, \tilde{a}).
+// TextNode represents plain text inside math mode \text{...}.
+type TextNode struct {
+	Text  string
+	Style string
+}
+
+func (t *TextNode) node() {}
+
+// AccNode represents an accented expression (\vec{v}, \hat{x}, \bar{z}).
 type AccNode struct {
-	Accent string // "\hat", "\vec", "\bar", "\tilde", "\dot", "\ddot"
+	Accent string
 	Target Node
 }
 
-func (AccNode) isNode() {}
+func (a *AccNode) node() {}
 
-// SpaceNode represents explicit spacing (\,, \;, \quad, \qquad, \!).
+// SpaceNode represents explicit spacing (\quad, \;, \,).
 type SpaceNode struct {
-	Width float64 // Width in em units
+	Width float64 // in em
 }
 
-func (SpaceNode) isNode() {}
-
-// TextNode represents \text{...} or \mathrm{...} literal text.
-type TextNode struct {
-	Text  string
-	Style string // "normal", "bold", "italic", "monospace"
-}
-
-func (TextNode) isNode() {}
+func (s *SpaceNode) node() {}

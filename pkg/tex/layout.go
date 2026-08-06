@@ -165,7 +165,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 		numBox.X = (maxW - numBox.Width) / 2
 		denBox.X = (maxW - denBox.Width) / 2
 
-		axisY := 0.25 * scale // TeX Axis Height
+		axisY := 0.25 * scale
 
 		numBox.Y = -(axisY + padding + numBox.Depth)
 		denBox.Y = axisY + padding + denBox.Height
@@ -190,6 +190,61 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 			Depth:    d,
 			Scale:    scale,
 			Children: []*Box{numBox, denBox, ruleBox},
+		}
+
+	case *BinomNode:
+		topBox := e.BuildLayout(n.Top, scale*0.8)
+		bottomBox := e.BuildLayout(n.Bottom, scale*0.8)
+
+		padding := 0.04 * scale
+		maxW := math.Max(topBox.Width, bottomBox.Width) + 2*padding
+
+		topBox.X = (maxW - topBox.Width) / 2
+		bottomBox.X = (maxW - bottomBox.Width) / 2
+
+		axisY := 0.25 * scale
+
+		topBox.Y = -(axisY + padding + topBox.Depth)
+		bottomBox.Y = axisY + padding + bottomBox.Height
+
+		h := -topBox.Y + topBox.Height
+		d := bottomBox.Y + bottomBox.Depth
+
+		delimW := 0.28 * scale
+		leftBox := &Box{
+			Type:       "char",
+			X:          0,
+			Y:          0,
+			Width:      delimW,
+			Height:     h,
+			Depth:      d,
+			Text:       "(",
+			FontFamily: "symbol",
+			Scale:      scale,
+		}
+
+		topBox.X += delimW
+		bottomBox.X += delimW
+
+		rightBox := &Box{
+			Type:       "char",
+			X:          delimW + maxW,
+			Y:          0,
+			Width:      delimW,
+			Height:     h,
+			Depth:      d,
+			Text:       ")",
+			FontFamily: "symbol",
+			Scale:      scale,
+		}
+
+		return &Box{
+			Type:     "group",
+			Width:    maxW + 2*delimW,
+			Height:   h,
+			Depth:    d,
+			Scale:    scale,
+			Children: []*Box{leftBox, topBox, bottomBox, rightBox},
 		}
 
 	case *SqrtNode:

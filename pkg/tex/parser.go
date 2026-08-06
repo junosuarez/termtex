@@ -1,7 +1,6 @@
 package tex
 
 import (
-	"fmt"
 	"strings"
 	"unicode"
 )
@@ -46,7 +45,6 @@ func (p *Parser) ParseExpr() (Node, error) {
 			if cmd == "\\end" || cmd == "\\right" {
 				break
 			}
-			// Check for row separator "\\"
 			if p.pos+1 < len(p.input) && p.input[p.pos+1] == '\\' {
 				break
 			}
@@ -70,7 +68,6 @@ func (p *Parser) ParseExpr() (Node, error) {
 	return &GroupNode{Children: nodes}, nil
 }
 
-// parseSingleNode parses a single item, including subscripts and superscripts.
 func (p *Parser) parseSingleNode() (Node, error) {
 	p.skipWhitespace()
 	if p.pos >= len(p.input) {
@@ -85,7 +82,6 @@ func (p *Parser) parseSingleNode() (Node, error) {
 		return nil, nil
 	}
 
-	// Check for attached subscripts '_' or superscripts '^'
 	var sub, sup Node
 	for p.pos < len(p.input) {
 		p.skipWhitespace()
@@ -129,7 +125,6 @@ func (p *Parser) parseSingleNode() (Node, error) {
 	return base, nil
 }
 
-// parseAtom parses an individual TeX token or macro construct.
 func (p *Parser) parseAtom() (Node, error) {
 	p.skipWhitespace()
 	if p.pos >= len(p.input) {
@@ -246,6 +241,17 @@ func (p *Parser) parseMacro() (Node, error) {
 		}
 		return &FracNode{Num: num, Den: den}, nil
 
+	case "\\binom":
+		top, err := p.parseGroupOrAtom()
+		if err != nil {
+			return nil, err
+		}
+		bottom, err := p.parseGroupOrAtom()
+		if err != nil {
+			return nil, err
+		}
+		return &BinomNode{Top: top, Bottom: bottom}, nil
+
 	case "\\sqrt":
 		var index Node
 		p.skipWhitespace()
@@ -292,7 +298,7 @@ func (p *Parser) parseMacro() (Node, error) {
 		rightDelim := ""
 		if p.pos < len(p.input) && p.input[p.pos] == '\\' {
 			if p.peekCommand() == "\\right" {
-				p.pos += 6 // consume \right
+				p.pos += 6
 				p.skipWhitespace()
 				if p.pos < len(p.input) {
 					if p.input[p.pos] == '\\' {
@@ -309,36 +315,89 @@ func (p *Parser) parseMacro() (Node, error) {
 			}
 		}
 
-		return &DelimNode{
-			Left:  leftDelim,
-			Right: rightDelim,
-			Inner: inner,
-		}, nil
+		return &DelimNode{Left: leftDelim, Right: rightDelim, Inner: inner}, nil
 
 	case "\\begin":
-		envName, err := p.parseGroupString()
-		if err != nil {
-			return nil, err
-		}
-		return p.parseEnvironment(envName)
+		p.skipWhitespace()
+		if p.pos < len(p.input) && p.input[p.pos] == '{' {
+			p.pos++
+			envStart := p.pos
+			for p.pos < len(p.input) && p.input[p.pos] != '}' {
+				p.pos++
+			}
+			envKind := string(p.input[envStart:p.pos])
+			if p.pos < len(p.input) && p.input[p.pos] == '}' {
+				p.pos++
+			}
 
-	case "\\hat", "\\vec", "\\bar", "\\tilde", "\\dot", "\\ddot":
+			var rows [][]Node
+			var currentRow []Node
+
+			for p.pos < len(p.input) {
+				p.skipWhitespace()
+				if p.peekCommand() == "\\end" {
+					if len(currentRow) > 0 {
+						rows = append(rows, currentRow)
+						currentRow = nil
+					}
+					p.pos += 4
+					p.skipWhitespace()
+					if p.pos < len(p.input) && p.input[p.pos] == '{' {
+						p.pos++
+						for p.pos < len(p.input) && p.input[p.pos] != '}' {
+							p.pos++
+						}
+						if p.pos < len(p.input) && p.input[p.pos] == '}' {
+							p.pos++
+						}
+					}
+					break
+				}
+
+				cell, err := p.ParseExpr()
+				if err != nil {
+					return nil, err
+				}
+				if cell != nil {
+					currentRow = append(currentRow, cell)
+				}
+
+				p.skipWhitespace()
+				if p.pos < len(p.input) {
+					if p.input[p.pos] == '&' {
+						p.pos++
+					} else if p.input[p.pos] == '\\' && p.pos+1 < len(p.input) && p.input[p.pos+1] == '\\' {
+						p.pos += 2
+						rows = append(rows, currentRow)
+						currentRow = nil
+					}
+				}
+			}
+
+			return &MatrixNode{Kind: envKind, Rows: rows}, nil
+		}
+
+	case "\\text":
+		p.skipWhitespace()
+		if p.pos < len(p.input) && p.input[p.pos] == '{' {
+			p.pos++
+			txtStart := p.pos
+			for p.pos < len(p.input) && p.input[p.pos] != '}' {
+				p.pos++
+			}
+			txt := string(p.input[txtStart:p.pos])
+			if p.pos < len(p.input) && p.input[p.pos] == '}' {
+				p.pos++
+			}
+			return &TextNode{Text: txt, Style: "upright"}, nil
+		}
+
+	case "\\vec", "\\hat", "\\bar", "\\tilde", "\\dot", "\\ddot":
 		target, err := p.parseGroupOrAtom()
 		if err != nil {
 			return nil, err
 		}
 		return &AccNode{Accent: cmd, Target: target}, nil
-
-	case "\\mathbf", "\\mathrm", "\\text":
-		text, err := p.parseGroupString()
-		if err != nil {
-			return nil, err
-		}
-		style := "bold"
-		if cmd == "\\mathrm" || cmd == "\\text" {
-			style = "normal"
-		}
-		return &TextNode{Text: text, Style: style}, nil
 
 	case "\\quad":
 		return &SpaceNode{Width: 1.0}, nil
@@ -358,83 +417,23 @@ func (p *Parser) parseMacro() (Node, error) {
 	}, nil
 }
 
-func (p *Parser) parseGroupString() (string, error) {
-	p.skipWhitespace()
-	if p.pos >= len(p.input) || p.input[p.pos] != '{' {
-		return "", fmt.Errorf("expected '{' at pos %d", p.pos)
-	}
-	p.pos++
-	start := p.pos
-	depth := 1
-	for p.pos < len(p.input) {
-		if p.input[p.pos] == '{' {
-			depth++
-		} else if p.input[p.pos] == '}' {
-			depth--
-			if depth == 0 {
-				res := string(p.input[start:p.pos])
-				p.pos++
-				return res, nil
-			}
-		}
+func (p *Parser) skipWhitespace() {
+	for p.pos < len(p.input) && (p.input[p.pos] == ' ' || p.input[p.pos] == '\t' || p.input[p.pos] == '\n' || p.input[p.pos] == '\r') {
 		p.pos++
 	}
-	return string(p.input[start:]), nil
-}
-
-func (p *Parser) parseEnvironment(envName string) (Node, error) {
-	var rows [][]Node
-	var currentRow []Node
-
-	for p.pos < len(p.input) {
-		p.skipWhitespace()
-		if p.peekCommand() == "\\end" {
-			p.pos += 4
-			p.parseGroupString() // consume {envName}
-			break
-		}
-
-		cell, err := p.ParseExpr()
-		if err != nil {
-			return nil, err
-		}
-		currentRow = append(currentRow, cell)
-
-		p.skipWhitespace()
-		if p.pos < len(p.input) {
-			if p.input[p.pos] == '&' {
-				p.pos++
-			} else if p.pos+1 < len(p.input) && p.input[p.pos] == '\\' && p.input[p.pos+1] == '\\' {
-				p.pos += 2
-				rows = append(rows, currentRow)
-				currentRow = nil
-			}
-		}
-	}
-
-	if len(currentRow) > 0 {
-		rows = append(rows, currentRow)
-	}
-
-	return &MatrixNode{
-		Kind: envName,
-		Rows: rows,
-	}, nil
 }
 
 func (p *Parser) peekCommand() string {
 	if p.pos >= len(p.input) || p.input[p.pos] != '\\' {
 		return ""
 	}
-	i := p.pos + 1
-	for i < len(p.input) && unicode.IsLetter(p.input[i]) {
-		i++
+	start := p.pos + 1
+	end := start
+	for end < len(p.input) && unicode.IsLetter(p.input[end]) {
+		end++
 	}
-	return "\\" + string(p.input[p.pos+1:i])
-}
-
-func (p *Parser) skipWhitespace() {
-	for p.pos < len(p.input) && (p.input[p.pos] == ' ' || p.input[p.pos] == '\t' || p.input[p.pos] == '\n' || p.input[p.pos] == '\r') {
-		p.pos++
+	if end == start {
+		return ""
 	}
+	return "\\" + string(p.input[start:end])
 }
