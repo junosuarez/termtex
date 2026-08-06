@@ -135,7 +135,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 
 		if supBox != nil {
 			supBox.X = baseBox.Width
-			supBox.Y = -(baseBox.Height * 0.35)
+			supBox.Y = -(baseBox.Height * 0.45)
 			gBox.Children = append(gBox.Children, supBox)
 			if supH := -supBox.Y + supBox.Height; supH > gBox.Height {
 				gBox.Height = supH
@@ -144,7 +144,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 
 		if subBox != nil {
 			subBox.X = baseBox.Width
-			subBox.Y = baseBox.Depth * 0.35
+			subBox.Y = baseBox.Depth * 0.45
 			gBox.Children = append(gBox.Children, subBox)
 			if subD := subBox.Y + subBox.Depth; subD > gBox.Depth {
 				gBox.Depth = subD
@@ -236,20 +236,26 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 		}
 
 	case *BigOpNode:
+		if !e.DisplayMode {
+			opChar := &CharNode{Symbol: n.Op, FontFamily: "symbol", IsOperator: true}
+			subSup := &SubSupNode{Base: opChar, Sub: n.Under, Sup: n.Over}
+			return e.BuildLayout(subSup, scale)
+		}
+
 		info := GetSymbolInfo(n.Op)
 		opUnicode := info.Unicode
 		if opUnicode == "" {
 			opUnicode = n.Op
 		}
 
-		opScale := scale * 1.15
-		opW := 0.70 * scale
+		opScale := scale * 1.25
+		opW := 0.65 * scale
 		if glyph, ok := GetGlyphInfo(n.Op); ok {
-			opW = (glyph.Width / 1000.0) * opScale
+			opW = (glyph.Width / 1000.0) * opScale * 0.70
 		}
 
-		opH := 0.70 * scale
-		opD := 0.20 * scale
+		opH := 0.85 * scale
+		opD := 0.25 * scale
 
 		opBox := &Box{
 			Type:       "char",
@@ -263,7 +269,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 			Scale:      opScale,
 		}
 
-		limScale := scale * 0.7
+		limScale := scale * 0.65
 		var underBox, overBox *Box
 		if n.Under != nil {
 			underBox = e.BuildLayout(n.Under, limScale)
@@ -288,14 +294,14 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 
 		if overBox != nil {
 			overBox.X = (maxW - overBox.Width) / 2
-			overBox.Y = -(opH + 0.02*scale + overBox.Depth)
+			overBox.Y = -(opH + 0.12*scale + overBox.Depth)
 			children = append(children, overBox)
 			totalH = -overBox.Y + overBox.Height
 		}
 
 		if underBox != nil {
 			underBox.X = (maxW - underBox.Width) / 2
-			underBox.Y = opD + 0.02*scale + underBox.Height
+			underBox.Y = opD + 0.12*scale + underBox.Height
 			children = append(children, underBox)
 			totalD = underBox.Y + underBox.Depth
 		}
@@ -314,7 +320,10 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 		h := innerBox.Height
 		d := innerBox.Depth
 
-		delimW := 0.24 * scale
+		totalHeight := h + d
+		delimScale := scale * math.Max(1.0, totalHeight/1.0)
+		delimW := 0.28 * delimScale
+
 		children := []*Box{}
 		curX := 0.0
 
@@ -328,7 +337,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 				Depth:      d,
 				Text:       n.Left,
 				FontFamily: "symbol",
-				Scale:      scale,
+				Scale:      delimScale,
 			}
 			children = append(children, leftBox)
 			curX += delimW
@@ -348,7 +357,7 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 				Depth:      d,
 				Text:       n.Right,
 				FontFamily: "symbol",
-				Scale:      scale,
+				Scale:      delimScale,
 			}
 			children = append(children, rightBox)
 			curX += delimW
@@ -378,8 +387,8 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 			return e.BuildLayout(&DelimNode{Left: "{", Right: "", Inner: &plainMatrix}, scale)
 		}
 
-		cellPaddingX := 0.12 * scale
-		cellPaddingY := 0.08 * scale
+		cellPaddingX := 0.18 * scale
+		cellPaddingY := 0.10 * scale
 
 		numRows := len(n.Rows)
 		if numRows == 0 {

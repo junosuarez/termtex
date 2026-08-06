@@ -37,6 +37,7 @@ var BenchmarkSuite = []BenchmarkFormula{
 func TestCompareWithMathJaxOracle(t *testing.T) {
 	opts := DefaultRenderOptions()
 	opts.Padding = 4.0
+	opts.DisplayMode = true // Standard block display mode for math benchmarking
 
 	fmt.Println("\n==========================================================================================")
 	fmt.Println("             STRUCTURED DIAGNOSTIC BENCHMARK: GO NATIVE vs MATHJAX ORACLE                 ")
@@ -167,6 +168,15 @@ func extractSymbols(texStr string) []string {
 				macro := string(runes[i:start])
 				if macro != "\\begin" && macro != "\\end" && macro != "\\frac" && macro != "\\text" {
 					syms = append(syms, macro)
+				}
+				// Skip environment parameters like {pmatrix}
+				if macro == "\\begin" || macro == "\\end" {
+					for start < len(runes) && runes[start] != '}' {
+						start++
+					}
+					if start < len(runes) && runes[start] == '}' {
+						start++
+					}
 				}
 				i = start - 1
 			}
