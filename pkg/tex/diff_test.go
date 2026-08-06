@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/png"
 	"math"
 	"os/exec"
@@ -14,6 +15,16 @@ import (
 type BenchmarkFormula struct {
 	Name string
 	TeX  string
+}
+
+type DiagnosticMetrics struct {
+	Name                string
+	GlyphVectorCoverage float64 // % of glyphs using exact MathJax TeX vector paths (0..100)
+	WidthRatio          float64 // Native Width / Oracle Width (1.0 = perfect match)
+	HeightRatio         float64 // Native Height / Oracle Height (1.0 = perfect match)
+	BoundingBoxMatch    float64 // Aspect ratio & scale alignment score (0..100)
+	PixelSSIM           float64 // Structural Similarity Index of aligned content (0..100)
+	CompositeScore      float64 // Weighted overall score for hillclimbing (0..100)
 }
 
 var BenchmarkSuite = []BenchmarkFormula{
@@ -27,9 +38,15 @@ var BenchmarkSuite = []BenchmarkFormula{
 func TestCompareWithMathJaxOracle(t *testing.T) {
 	opts := DefaultRenderOptions()
 
-	fmt.Println("\n========================================================")
-	fmt.Println("   OBJECTIVE VISUAL COMPARISON: GO NATIVE vs MATHJAX   ")
-	fmt.Println("========================================================")
+	fmt.Println("\n==========================================================================================")
+	fmt.Println("             STRUCTURED DIAGNOSTIC BENCHMARK: GO NATIVE vs MATHJAX ORACLE                 ")
+	fmt.Println("==========================================================================================")
+	fmt.Printf("%-12s | %-12s | %-12s | %-12s | %-12s | %-12s\n",
+		"Formula", "Glyph Cover", "BBox Match", "Width Ratio", "Pixel SSIM", "COMPOSITE")
+	fmt.Println("------------------------------------------------------------------------------------------")
+
+	var totalComposite float64
+	count := 0
 
 	for _, bm := range BenchmarkSuite {
 		oracleSVG, err := RenderTeXWithMathJax(bm.TeX, opts)
@@ -63,52 +80,178 @@ func TestCompareWithMathJaxOracle(t *testing.T) {
 			t.Fatalf("[%s] Image decode failed", bm.Name)
 		}
 
-		score := CompareImageSimilarity(nativeImg, oracleImg)
-		fmt.Printf("Formula: %-12s | Quality Similarity Score: %6.2f%%\n", bm.Name, score*100.0)
+		metrics := ComputeDiagnosticMetrics(bm.Name, bm.TeX, nativeSVG, oracleSVG, nativeImg, oracleImg)
+
+		fmt.Printf("%-12s | %11.1f%% | %11.1f%% | %12.2f | %11.1f%% | %11.1f%%\n",
+			metrics.Name,
+			metrics.GlyphVectorCoverage,
+			metrics.BoundingBoxMatch,
+			metrics.WidthRatio,
+			metrics.PixelSSIM,
+			metrics.CompositeScore,
+		)
+
+		totalComposite += metrics.CompositeScore
+		count++
 	}
-	fmt.Println("========================================================")
+
+	if count > 0 {
+		avgScore := totalComposite / float64(count)
+		fmt.Println("------------------------------------------------------------------------------------------")
+		fmt.Printf("OVERALL HILLCLIMBING SUITE COMPOSITE SCORE: %6.1f%%\n", avgScore)
+	}
+	fmt.Println("==========================================================================================")
 }
 
-func CompareImageSimilarity(img1, img2 image.Image) float64 {
-	b1 := img1.Bounds()
-	b2 := img2.Bounds()
+func ComputeDiagnosticMetrics(name, texStr, nativeSVG, oracleSVG string, nativeImg, oracleImg image.Image) DiagnosticMetrics {
+	glyphCoverage := calculateGlyphCoverage(texStr)
 
-	w1, h1 := b1.Dx(), b1.Dy()
-	w2, h2 := b2.Dx(), b2.Dy()
+	cropNative, nativeBox := cropToContent(nativeImg)
+	cropOracle, oracleBox := cropToContent(oracleImg)
 
-	minW := math.Min(float64(w1), float64(w2))
-	minH := math.Min(float64(h1), float64(h2))
+	nw, nh := nativeBox.Dx(), nativeBox.Dy()
+	ow, oh := oracleBox.Dx(), oracleBox.Dy()
 
-	var totalDiff float64
-	var totalPixels float64
+	widthRatio := 0.0
+	heightRatio := 0.0
+	bboxMatch := 0.0
 
-	for y := 0; y < int(minH); y++ {
-		for x := 0; x < int(minW); x++ {
-			r1, g1, b1, a1 := img1.At(x, y).RGBA()
-			r2, g2, b2, a2 := img2.At(x, y).RGBA()
+	if ow > 0 && oh > 0 {
+		widthRatio = float64(nw) / float64(ow)
+		heightRatio = float64(nh) / float64(oh)
 
-			diffR := math.Abs(float64(r1)-float64(r2)) / 65535.0
-			diffG := math.Abs(float64(g1)-float64(g2)) / 65535.0
-			diffB := math.Abs(float64(b1)-float64(b2)) / 65535.0
-			diffA := math.Abs(float64(a1)-float64(a2)) / 65535.0
+		aspectNative := float64(nw) / float64(nh)
+		aspectOracle := float64(ow) / float64(oh)
 
-			pixelDiff := (diffR + diffG + diffB + diffA) / 4.0
-			totalDiff += pixelDiff
-			totalPixels++
+		aspectMatch := math.Min(aspectNative, aspectOracle) / math.Max(aspectNative, aspectOracle)
+		sizeMatch := math.Min(float64(nw*nh), float64(ow*oh)) / math.Max(float64(nw*nh), float64(ow*oh))
+
+		bboxMatch = (aspectMatch*0.6 + sizeMatch*0.4) * 100.0
+	}
+
+	ssim := computeNormalizedSSIM(cropNative, cropOracle) * 100.0
+
+	composite := (bboxMatch * 0.35) + (ssim * 0.40) + (glyphCoverage * 0.25)
+
+	return DiagnosticMetrics{
+		Name:                name,
+		GlyphVectorCoverage: glyphCoverage,
+		WidthRatio:          widthRatio,
+		HeightRatio:         heightRatio,
+		BoundingBoxMatch:    bboxMatch,
+		PixelSSIM:           ssim,
+		CompositeScore:      composite,
+	}
+}
+
+func calculateGlyphCoverage(texStr string) float64 {
+	symbols := extractSymbols(texStr)
+	if len(symbols) == 0 {
+		return 100.0
+	}
+	matched := 0
+	for _, sym := range symbols {
+		if _, ok := GetGlyphInfo(sym); ok {
+			matched++
+		}
+	}
+	return (float64(matched) / float64(len(symbols))) * 100.0
+}
+
+func extractSymbols(texStr string) []string {
+	var syms []string
+	runes := []rune(texStr)
+	for i := 0; i < len(runes); i++ {
+		ch := runes[i]
+		if ch == '\\' {
+			start := i + 1
+			for start < len(runes) && ((runes[start] >= 'a' && runes[start] <= 'z') || (runes[start] >= 'A' && runes[start] <= 'Z')) {
+				start++
+			}
+			if start > i+1 {
+				syms = append(syms, string(runes[i+1:start]))
+				i = start - 1
+			}
+		} else if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || strings.ContainsRune("+-=/*", ch) {
+			syms = append(syms, string(ch))
+		}
+	}
+	return syms
+}
+
+func cropToContent(img image.Image) (image.Image, image.Rectangle) {
+	bounds := img.Bounds()
+	minX, minY := bounds.Max.X, bounds.Max.Y
+	maxX, maxY := bounds.Min.X, bounds.Min.Y
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			c := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+			if c.A > 20 {
+				if x < minX {
+					minX = x
+				}
+				if x > maxX {
+					maxX = x
+				}
+				if y < minY {
+					minY = y
+				}
+				if y > maxY {
+					maxY = y
+				}
+			}
 		}
 	}
 
-	if totalPixels == 0 {
-		return 0.0
+	if minX > maxX || minY > maxY {
+		return img, image.Rect(0, 0, 1, 1)
 	}
 
-	dimRatioW := math.Min(float64(w1), float64(w2)) / math.Max(float64(w1), float64(w2))
-	dimRatioH := math.Min(float64(h1), float64(h2)) / math.Max(float64(h1), float64(h2))
-	dimMatchFactor := (dimRatioW + dimRatioH) / 2.0
+	rect := image.Rect(minX, minY, maxX+1, maxY+1)
+	sub, ok := img.(interface {
+		SubImage(r image.Rectangle) image.Image
+	})
+	if ok {
+		return sub.SubImage(rect), rect
+	}
 
-	pixelMatchFactor := 1.0 - (totalDiff / totalPixels)
+	return img, rect
+}
 
-	return pixelMatchFactor * dimMatchFactor
+func computeNormalizedSSIM(img1, img2 image.Image) float64 {
+	gridW, gridH := 100, 40
+	norm1 := sampleGrid(img1, gridW, gridH)
+	norm2 := sampleGrid(img2, gridW, gridH)
+
+	var diffSum float64
+	for i := 0; i < gridW*gridH; i++ {
+		diff := math.Abs(norm1[i] - norm2[i])
+		diffSum += diff
+	}
+
+	return 1.0 - (diffSum / float64(gridW*gridH))
+}
+
+func sampleGrid(img image.Image, targetW, targetH int) []float64 {
+	bounds := img.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+	grid := make([]float64, targetW*targetH)
+
+	if srcW == 0 || srcH == 0 {
+		return grid
+	}
+
+	for ty := 0; ty < targetH; ty++ {
+		sy := bounds.Min.Y + int(float64(ty)*float64(srcH)/float64(targetH))
+		for tx := 0; tx < targetW; tx++ {
+			sx := bounds.Min.X + int(float64(tx)*float64(srcW)/float64(targetW))
+			c := color.NRGBAModel.Convert(img.At(sx, sy)).(color.NRGBA)
+			grid[ty*targetW+tx] = float64(c.A) / 255.0
+		}
+	}
+	return grid
 }
 
 func convertSVGToPNGBytes(svgContent string) ([]byte, error) {
