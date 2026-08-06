@@ -12,7 +12,7 @@ import (
 type RenderOptions struct {
 	FgColor     string  // Hex color or "currentColor"
 	BgColor     string  // Hex color or "transparent"
-	FontSize    float64 // Base font size in pixels (default 28)
+	FontSize    float64 // Base font size in pixels (default 32)
 	Padding     float64 // Canvas padding in pixels (default 16)
 	DisplayMode bool    // Display mode vs inline
 }
@@ -22,7 +22,7 @@ func DefaultRenderOptions() RenderOptions {
 	return RenderOptions{
 		FgColor:  "#cdd6f4", // Catppuccin Text / Terminal white
 		BgColor:  "transparent",
-		FontSize: 28,
+		FontSize: 32,
 		Padding:  16,
 	}
 }
@@ -76,10 +76,10 @@ func RenderTeXWithMathJax(texInput string, opts RenderOptions) (string, error) {
 	return svgStr, nil
 }
 
-// RenderSVG converts an AST Node into a fallback vector SVG string.
+// RenderSVG converts an AST Node into a Computer Modern vector path SVG string.
 func RenderSVG(root Node, opts RenderOptions) (string, error) {
 	if opts.FontSize <= 0 {
-		opts.FontSize = 28
+		opts.FontSize = 32
 	}
 	if opts.Padding < 0 {
 		opts.Padding = 16
@@ -102,35 +102,43 @@ func RenderSVG(root Node, opts RenderOptions) (string, error) {
 
 	baselineY := opts.Padding + boxH
 
+	defsMap := make(map[string]GlyphInfo)
+
+	var bodySb strings.Builder
+
+	renderBoxVectorRecursive(&bodySb, layout, opts.Padding, baselineY, emPx, opts.FgColor, defsMap)
+
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%.2f" height="%.2f" viewBox="0 0 %.2f %.2f">`,
+	sb.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="%.2f" height="%.2f" viewBox="0 0 %.2f %.2f">`,
 		totalWidth, totalHeight, totalWidth, totalHeight))
 	sb.WriteString("\n")
 
-	sb.WriteString(fmt.Sprintf(`  <style>
-    .math-text { fill: %s; font-size: %.2fpx; }
-    .math-italic { font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Times New Roman", serif; font-style: italic; }
-    .math-upright { font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Times New Roman", serif; font-style: normal; }
-    .math-bold { font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", serif; font-weight: bold; }
-    .symbol { font-family: "Cambria Math", "STIX Two Math", "DejaVu Sans", sans-serif; }
-    .rule { fill: %s; }
-  </style>`, opts.FgColor, opts.FontSize, opts.FgColor))
-	sb.WriteString("\n")
+	// Emit <defs> containing vector glyph path definitions
+	sb.WriteString("  <defs>\n")
+	for _, glyph := range defsMap {
+		sb.WriteString(fmt.Sprintf(`    <path id="%s" d="%s"/>`, glyph.ID, glyph.PathD))
+		sb.WriteString("\n")
+	}
+	sb.WriteString("  </defs>\n")
 
+	// Background rectangle if specified
 	if opts.BgColor != "" && opts.BgColor != "transparent" {
 		sb.WriteString(fmt.Sprintf(`  <rect width="100%%" height="100%%" fill="%s" rx="8"/>`, opts.BgColor))
 		sb.WriteString("\n")
 	}
 
-	renderBoxRecursive(&sb, layout, opts.Padding, baselineY, emPx, opts.FgColor)
-
+	// Group container with fill color
+	sb.WriteString(fmt.Sprintf(`  <g fill="%s" stroke="%s" stroke-width="0">`, opts.FgColor, opts.FgColor))
+	sb.WriteString("\n")
+	sb.WriteString(bodySb.String())
+	sb.WriteString("  </g>\n")
 	sb.WriteString("</svg>\n")
 
 	return sb.String(), nil
 }
 
-func renderBoxRecursive(sb *strings.Builder, box *Box, currentX, baselineY, emPx float64, fgColor string) {
+func renderBoxVectorRecursive(sb *strings.Builder, box *Box, currentX, baselineY, emPx float64, fgColor string, defsMap map[string]GlyphInfo) {
 	if box == nil {
 		return
 	}
@@ -140,34 +148,51 @@ func renderBoxRecursive(sb *strings.Builder, box *Box, currentX, baselineY, emPx
 
 	switch box.Type {
 	case "char", "text":
-		class := "math-italic"
-		if box.FontFamily == "math-upright" || box.FontFamily == "normal" {
-			class = "math-upright"
-		} else if box.FontFamily == "math-bold" || box.FontFamily == "bold" {
-			class = "math-bold"
-		} else if box.FontFamily == "symbol" {
-			class = "symbol"
+		runes := []rune(box.Text)
+		curX := absX
+
+		for _, r := range runes {
+			symStr := string(r)
+			glyph, ok := GetGlyphInfo(symStr)
+
+			if !ok {
+				// Fallback to text tag if glyph vector path not found
+				fontSize := emPx * box.Scale
+				escapedText := escapeXML(symStr)
+				sb.WriteString(fmt.Sprintf(`    <text x="%.2f" y="%.2f" fill="%s" font-size="%.2fpx" font-family="serif">%s</text>`,
+					curX, absY, fgColor, fontSize, escapedText))
+				sb.WriteString("\n")
+				curX += 0.55 * emPx * box.Scale
+				continue
+			}
+
+			// Add vector path to defs map
+			defsMap[glyph.ID] = glyph
+
+			// Calculate scale factor (1000 units = 1 em)
+			scaleFactor := (emPx / 1000.0) * box.Scale
+
+			// In SVG, TeX Y coordinates flip (MathJax path ascent is positive Y up)
+			sb.WriteString(fmt.Sprintf(`    <g transform="translate(%.2f, %.2f) scale(%.4f, -%.4f)">`,
+				curX, absY, scaleFactor, scaleFactor))
+			sb.WriteString(fmt.Sprintf(`      <use href="#%s"/>`, glyph.ID))
+			sb.WriteString("    </g>\n")
+
+			curX += (glyph.Width / 1000.0) * emPx * box.Scale
 		}
-
-		fontSize := emPx * box.Scale
-		escapedText := escapeXML(box.Text)
-
-		sb.WriteString(fmt.Sprintf(`  <text x="%.2f" y="%.2f" class="math-text %s" font-size="%.2fpx">%s</text>`,
-			absX, absY, class, fontSize, escapedText))
-		sb.WriteString("\n")
 
 	case "rule":
 		ruleW := box.Width * emPx
 		ruleH := (box.Height + box.Depth) * emPx
 		ruleY := absY - box.Height*emPx
 
-		sb.WriteString(fmt.Sprintf(`  <rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" class="rule" rx="1"/>`,
+		sb.WriteString(fmt.Sprintf(`    <rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" rx="0.5"/>`,
 			absX, ruleY, ruleW, ruleH))
 		sb.WriteString("\n")
 	}
 
 	for _, child := range box.Children {
-		renderBoxRecursive(sb, child, absX, absY, emPx, fgColor)
+		renderBoxVectorRecursive(sb, child, absX, absY, emPx, fgColor, defsMap)
 	}
 }
 

@@ -37,6 +37,7 @@ var BenchmarkSuite = []BenchmarkFormula{
 
 func TestCompareWithMathJaxOracle(t *testing.T) {
 	opts := DefaultRenderOptions()
+	opts.Padding = 4.0
 
 	fmt.Println("\n==========================================================================================")
 	fmt.Println("             STRUCTURED DIAGNOSTIC BENCHMARK: GO NATIVE vs MATHJAX ORACLE                 ")
