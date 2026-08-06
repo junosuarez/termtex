@@ -46,6 +46,26 @@ func TestParseBigOperators(t *testing.T) {
 	}
 }
 
+func TestParseUnderOverBrace(t *testing.T) {
+	expr := `\underbrace{a + b}_{n \text{ terms}}`
+	node, err := Parse(expr)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	brace, ok := node.(*UnderOverBraceNode)
+	if !ok {
+		t.Fatalf("Expected UnderOverBraceNode, got %T", node)
+	}
+
+	if brace.Kind != "underbrace" {
+		t.Errorf("Expected underbrace kind, got %s", brace.Kind)
+	}
+	if brace.Target == nil || brace.Annotation == nil {
+		t.Errorf("Expected Target and Annotation nodes")
+	}
+}
+
 func TestParseMatrix(t *testing.T) {
 	expr := `\begin{pmatrix} a & b \\ c & d \end{pmatrix}`
 	node, err := Parse(expr)

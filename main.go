@@ -180,6 +180,10 @@ func runDemo(opts tex.RenderOptions) {
 			Title: "5. Piecewise Cases (Braces & Text Mode)",
 			TeX:   `\begin{cases} x^2 & \text{if } x \ge 0 \\ -x & \text{otherwise} \end{cases}`,
 		},
+		{
+			Title: "6. Underbraces & Overbraces (Annotations)",
+			TeX:   `\underbrace{a + b + \dots + z}_{26 \text{ terms}}`,
+		},
 	}
 
 	for _, demo := range demos {
@@ -193,7 +197,7 @@ func runDemo(opts tex.RenderOptions) {
 		}
 	}
 
-	fmt.Println("\n--> 6. Mixed Document Interspersed Text & Inline Math")
+	fmt.Println("\n--> 7. Mixed Document Interspersed Text & Inline Math")
 	fmt.Println("    Text: \"Where $V(S_t)$ is the state value: $$V(S_t) \\leftarrow V(S_t) + \\alpha[R_{t+1} + \\gamma V(S_{t+1}) - V(S_t)]$$\"\n")
 
 	docStr := "Where $V(S_t)$ is the state value at time $t$, updated via:\n\n$$V(S_t) \\leftarrow V(S_t) + \\alpha[R_{t+1} + \\gamma V(S_{t+1}) - V(S_t)]$$"
@@ -219,6 +223,7 @@ USAGE:
 
 EXAMPLES:
   termtex --demo
+  termtex "\underbrace{a + b + \dots + z}_{26 \text{ terms}}"
   termtex "\frac{1}{x^2+1}"
   termtex "Where $V(S_t)$ is the state value."
   termtex -o quadratic.png "x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"

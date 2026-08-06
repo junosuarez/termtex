@@ -114,6 +114,17 @@ func (p *Parser) parseSingleNode() (Node, error) {
 		return bigOp, nil
 	}
 
+	if brace, ok := base.(*UnderOverBraceNode); ok {
+		if brace.Kind == "underbrace" && sub != nil {
+			brace.Annotation = sub
+			return brace, nil
+		}
+		if brace.Kind == "overbrace" && sup != nil {
+			brace.Annotation = sup
+			return brace, nil
+		}
+	}
+
 	if sub != nil || sup != nil {
 		return &SubSupNode{
 			Base: base,
@@ -251,6 +262,20 @@ func (p *Parser) parseMacro() (Node, error) {
 			return nil, err
 		}
 		return &BinomNode{Top: top, Bottom: bottom}, nil
+
+	case "\\underbrace":
+		target, err := p.parseGroupOrAtom()
+		if err != nil {
+			return nil, err
+		}
+		return &UnderOverBraceNode{Kind: "underbrace", Target: target}, nil
+
+	case "\\overbrace":
+		target, err := p.parseGroupOrAtom()
+		if err != nil {
+			return nil, err
+		}
+		return &UnderOverBraceNode{Kind: "overbrace", Target: target}, nil
 
 	case "\\sqrt":
 		var index Node

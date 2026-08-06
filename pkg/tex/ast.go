@@ -96,6 +96,15 @@ type AccNode struct {
 
 func (a *AccNode) node() {}
 
+// UnderOverBraceNode represents \underbrace{content}_{label} or \overbrace{content}^{label}.
+type UnderOverBraceNode struct {
+	Kind       string // "underbrace" or "overbrace"
+	Target     Node
+	Annotation Node
+}
+
+func (u *UnderOverBraceNode) node() {}
+
 // SpaceNode represents explicit spacing (\quad, \;, \,).
 type SpaceNode struct {
 	Width float64 // in em

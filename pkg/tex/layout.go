@@ -247,6 +247,65 @@ func (e *LayoutEngine) BuildLayout(node Node, scale float64) *Box {
 			Children: []*Box{leftBox, topBox, bottomBox, rightBox},
 		}
 
+	case *UnderOverBraceNode:
+		targetBox := e.BuildLayout(n.Target, scale)
+
+		var annotBox *Box
+		if n.Annotation != nil {
+			annotBox = e.BuildLayout(n.Annotation, scale*0.7)
+		}
+
+		maxW := targetBox.Width
+		if annotBox != nil && annotBox.Width > maxW {
+			maxW = annotBox.Width
+		}
+
+		targetBox.X = (maxW - targetBox.Width) / 2
+
+		braceHeight := 0.25 * scale
+		braceBox := &Box{
+			Type:   "rule",
+			X:      (maxW - targetBox.Width) / 2,
+			Width:  targetBox.Width,
+			Height: braceHeight,
+			Depth:  0,
+			Scale:  scale,
+		}
+
+		totalH := targetBox.Height
+		totalD := targetBox.Depth
+
+		children := []*Box{targetBox, braceBox}
+
+		if n.Kind == "underbrace" {
+			braceBox.Y = targetBox.Depth + 0.05*scale
+			totalD = braceBox.Y + braceHeight
+			if annotBox != nil {
+				annotBox.X = (maxW - annotBox.Width) / 2
+				annotBox.Y = braceBox.Y + braceHeight + 0.05*scale + annotBox.Height
+				children = append(children, annotBox)
+				totalD = annotBox.Y + annotBox.Depth
+			}
+		} else { // overbrace
+			braceBox.Y = -(targetBox.Height + 0.05*scale)
+			totalH = -braceBox.Y + braceHeight
+			if annotBox != nil {
+				annotBox.X = (maxW - annotBox.Width) / 2
+				annotBox.Y = -(totalH + 0.05*scale + annotBox.Depth)
+				children = append(children, annotBox)
+				totalH = -annotBox.Y + annotBox.Height
+			}
+		}
+
+		return &Box{
+			Type:     "group",
+			Width:    maxW,
+			Height:   totalH,
+			Depth:    totalD,
+			Scale:    scale,
+			Children: children,
+		}
+
 	case *SqrtNode:
 		contentBox := e.BuildLayout(n.Content, scale)
 		padding := 0.04 * scale
