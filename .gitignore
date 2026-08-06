@@ -1,7 +1,15 @@
+# Dependencies
+node_modules/
+package-lock.json
+
 # Binary output
 termtex
 
 # Temporary files
 *.tmp
 *.log
+*.png
+!assets/*.png
+*.svg
+!assets/*.svg
 .DS_Store

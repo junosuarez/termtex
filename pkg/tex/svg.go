@@ -3,6 +3,7 @@ package tex
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -49,7 +50,14 @@ func RenderTeXWithMathJax(texInput string, opts RenderOptions) (string, error) {
 		displayStr = "false"
 	}
 
-	cmd := exec.Command("node", "render_mathjax.js", texInput, displayStr, opts.FgColor)
+	scriptPath := "render_mathjax.js"
+	if _, err := os.Stat(scriptPath); err != nil {
+		if _, err2 := os.Stat("../../render_mathjax.js"); err2 == nil {
+			scriptPath = "../../render_mathjax.js"
+		}
+	}
+
+	cmd := exec.Command("node", scriptPath, texInput, displayStr, opts.FgColor)
 	var out bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &out
