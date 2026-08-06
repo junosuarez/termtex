@@ -1,0 +1,7 @@
+# Binary output
+termtex
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
