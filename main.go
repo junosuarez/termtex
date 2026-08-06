@@ -96,13 +96,8 @@ func main() {
 		return
 	}
 
-	astNode, err := tex.Parse(inputStr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing LaTeX: %v\n", err)
-		os.Exit(1)
-	}
-
-	svgString, err := tex.RenderSVG(astNode, opts)
+	// Generate SVG via MathJax (or native fallback)
+	svgString, err := tex.RenderTeXToSVG(inputStr, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error rendering SVG: %v\n", err)
 		os.Exit(1)
@@ -134,11 +129,13 @@ func main() {
 	case "svg":
 		fmt.Print(svgString)
 	case "text", "ascii":
+		astNode, _ := tex.Parse(inputStr)
 		fmt.Println(render.RenderASCII(astNode))
 	case "kitty", "auto":
 		err := render.RenderToTerminal(svgString, os.Stdout)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Warning: Kitty graphics protocol failed, falling back to text:")
+			astNode, _ := tex.Parse(inputStr)
 			fmt.Println(render.RenderASCII(astNode))
 		}
 	default:

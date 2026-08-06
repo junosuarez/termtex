@@ -1,7 +1,9 @@
 package tex
 
 import (
+	"bytes"
 	"fmt"
+	"os/exec"
 	"strings"
 )
 
@@ -24,7 +26,49 @@ func DefaultRenderOptions() RenderOptions {
 	}
 }
 
-// RenderSVG converts a Root Node into a complete vector SVG string.
+// RenderTeXToSVG converts a LaTeX string into an SVG string, preferring MathJax if available.
+func RenderTeXToSVG(texInput string, opts RenderOptions) (string, error) {
+	// Try MathJax engine first for pixel-perfect TeX rendering
+	svgStr, err := RenderTeXWithMathJax(texInput, opts)
+	if err == nil && svgStr != "" {
+		return svgStr, nil
+	}
+
+	// Fallback to native Go TeX layout engine
+	astNode, parseErr := Parse(texInput)
+	if parseErr != nil {
+		return "", parseErr
+	}
+	return RenderSVG(astNode, opts)
+}
+
+// RenderTeXWithMathJax executes MathJax engine to generate vector SVG with Computer Modern TeX paths.
+func RenderTeXWithMathJax(texInput string, opts RenderOptions) (string, error) {
+	displayStr := "true"
+	if !opts.DisplayMode {
+		displayStr = "false"
+	}
+
+	cmd := exec.Command("node", "render_mathjax.js", texInput, displayStr, opts.FgColor)
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("MathJax execution failed: %w (%s)", err, stderr.String())
+	}
+
+	svgStr := strings.TrimSpace(out.String())
+	if !strings.HasPrefix(svgStr, "<svg") {
+		return "", fmt.Errorf("invalid SVG output from MathJax")
+	}
+
+	return svgStr, nil
+}
+
+// RenderSVG converts an AST Node into a fallback vector SVG string.
 func RenderSVG(root Node, opts RenderOptions) (string, error) {
 	if opts.FontSize <= 0 {
 		opts.FontSize = 28
@@ -41,7 +85,6 @@ func RenderSVG(root Node, opts RenderOptions) (string, error) {
 
 	emPx := opts.FontSize
 
-	// Total box dimensions in pixels
 	boxW := layout.Width * emPx
 	boxH := layout.Height * emPx
 	boxD := layout.Depth * emPx
@@ -49,7 +92,6 @@ func RenderSVG(root Node, opts RenderOptions) (string, error) {
 	totalWidth := boxW + opts.Padding*2
 	totalHeight := boxH + boxD + opts.Padding*2
 
-	// Baseline Y position relative to top of SVG canvas
 	baselineY := opts.Padding + boxH
 
 	var sb strings.Builder
@@ -58,7 +100,6 @@ func RenderSVG(root Node, opts RenderOptions) (string, error) {
 		totalWidth, totalHeight, totalWidth, totalHeight))
 	sb.WriteString("\n")
 
-	// Embedded CSS styling and font declarations
 	sb.WriteString(fmt.Sprintf(`  <style>
     .math-text { fill: %s; font-size: %.2fpx; }
     .math-italic { font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Times New Roman", serif; font-style: italic; }
@@ -69,13 +110,11 @@ func RenderSVG(root Node, opts RenderOptions) (string, error) {
   </style>`, opts.FgColor, opts.FontSize, opts.FgColor))
 	sb.WriteString("\n")
 
-	// Background rectangle if not transparent
 	if opts.BgColor != "" && opts.BgColor != "transparent" {
 		sb.WriteString(fmt.Sprintf(`  <rect width="100%%" height="100%%" fill="%s" rx="8"/>`, opts.BgColor))
 		sb.WriteString("\n")
 	}
 
-	// Render all boxes recursively
 	renderBoxRecursive(&sb, layout, opts.Padding, baselineY, emPx, opts.FgColor)
 
 	sb.WriteString("</svg>\n")
@@ -119,13 +158,11 @@ func renderBoxRecursive(sb *strings.Builder, box *Box, currentX, baselineY, emPx
 		sb.WriteString("\n")
 	}
 
-	// Render child boxes
 	for _, child := range box.Children {
 		renderBoxRecursive(sb, child, absX, absY, emPx, fgColor)
 	}
 }
 
-// escapeXML escapes standard XML special characters.
 func escapeXML(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")

@@ -1,0 +1,24 @@
+{
+  "name": "termtex",
+  "version": "1.0.0",
+  "description": "`termtex` is a lightweight, pure Go CLI tool that renders LaTeX math expressions and mixed Markdown documents directly into the terminal window using vector SVG typesetting and the **Kitty Graphics Protocol**.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/junosuarez/termtex.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/junosuarez/termtex/issues"
+  },
+  "homepage": "https://github.com/junosuarez/termtex#readme",
+  "dependencies": {
+    "mathjax-full": "^3.2.1"
+  }
+}
