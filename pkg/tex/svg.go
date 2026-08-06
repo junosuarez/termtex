@@ -3,6 +3,7 @@ package tex
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"strings"
@@ -13,7 +14,7 @@ type RenderOptions struct {
 	FgColor     string  // Hex color or "currentColor"
 	BgColor     string  // Hex color or "transparent"
 	FontSize    float64 // Base font size in pixels (default 32)
-	Padding     float64 // Canvas padding in pixels (default 16)
+	Padding     float64 // Canvas padding in pixels (default 8)
 	DisplayMode bool    // Display mode vs inline
 }
 
@@ -23,19 +24,17 @@ func DefaultRenderOptions() RenderOptions {
 		FgColor:  "#cdd6f4", // Catppuccin Text / Terminal white
 		BgColor:  "transparent",
 		FontSize: 32,
-		Padding:  16,
+		Padding:  8,
 	}
 }
 
 // RenderTeXToSVG converts a LaTeX string into an SVG string, preferring MathJax if available.
 func RenderTeXToSVG(texInput string, opts RenderOptions) (string, error) {
-	// Try MathJax engine first for pixel-perfect TeX rendering
 	svgStr, err := RenderTeXWithMathJax(texInput, opts)
 	if err == nil && svgStr != "" {
 		return svgStr, nil
 	}
 
-	// Fallback to native Go TeX layout engine
 	astNode, parseErr := Parse(texInput)
 	if parseErr != nil {
 		return "", parseErr
@@ -76,13 +75,43 @@ func RenderTeXWithMathJax(texInput string, opts RenderOptions) (string, error) {
 	return svgStr, nil
 }
 
+// BBoxBounds tracks exact min/max bounds during SVG vector rendering.
+type BBoxBounds struct {
+	MinX float64
+	MaxX float64
+	MinY float64
+	MaxY float64
+	Init bool
+}
+
+func (b *BBoxBounds) AddPoint(x, y float64) {
+	if !b.Init {
+		b.MinX, b.MaxX = x, x
+		b.MinY, b.MaxY = y, y
+		b.Init = true
+		return
+	}
+	if x < b.MinX {
+		b.MinX = x
+	}
+	if x > b.MaxX {
+		b.MaxX = x
+	}
+	if y < b.MinY {
+		b.MinY = y
+	}
+	if y > b.MaxY {
+		b.MaxY = y
+	}
+}
+
 // RenderSVG converts an AST Node into a Computer Modern vector path SVG string.
 func RenderSVG(root Node, opts RenderOptions) (string, error) {
 	if opts.FontSize <= 0 {
 		opts.FontSize = 32
 	}
 	if opts.Padding < 0 {
-		opts.Padding = 16
+		opts.Padding = 8
 	}
 	if opts.FgColor == "" {
 		opts.FgColor = "#cdd6f4"
@@ -103,10 +132,21 @@ func RenderSVG(root Node, opts RenderOptions) (string, error) {
 	baselineY := opts.Padding + boxH
 
 	defsMap := make(map[string]GlyphInfo)
+	bounds := &BBoxBounds{}
 
 	var bodySb strings.Builder
 
-	renderBoxVectorRecursive(&bodySb, layout, opts.Padding, baselineY, emPx, opts.FgColor, defsMap)
+	renderBoxVectorRecursive(&bodySb, layout, opts.Padding, baselineY, emPx, opts.FgColor, defsMap, bounds)
+
+	// If bounds were collected, refine canvas size to tight bounding box
+	if bounds.Init {
+		w := math.Max(bounds.MaxX-bounds.MinX+opts.Padding*2, 10.0)
+		h := math.Max(bounds.MaxY-bounds.MinY+opts.Padding*2, 10.0)
+		if w > 0 && h > 0 {
+			totalWidth = w
+			totalHeight = h
+		}
+	}
 
 	var sb strings.Builder
 
@@ -114,7 +154,6 @@ func RenderSVG(root Node, opts RenderOptions) (string, error) {
 		totalWidth, totalHeight, totalWidth, totalHeight))
 	sb.WriteString("\n")
 
-	// Emit <defs> containing vector glyph path definitions
 	sb.WriteString("  <defs>\n")
 	for _, glyph := range defsMap {
 		sb.WriteString(fmt.Sprintf(`    <path id="%s" d="%s"/>`, glyph.ID, glyph.PathD))
@@ -122,13 +161,11 @@ func RenderSVG(root Node, opts RenderOptions) (string, error) {
 	}
 	sb.WriteString("  </defs>\n")
 
-	// Background rectangle if specified
 	if opts.BgColor != "" && opts.BgColor != "transparent" {
 		sb.WriteString(fmt.Sprintf(`  <rect width="100%%" height="100%%" fill="%s" rx="8"/>`, opts.BgColor))
 		sb.WriteString("\n")
 	}
 
-	// Group container with fill color
 	sb.WriteString(fmt.Sprintf(`  <g fill="%s" stroke="%s" stroke-width="0">`, opts.FgColor, opts.FgColor))
 	sb.WriteString("\n")
 	sb.WriteString(bodySb.String())
@@ -138,7 +175,7 @@ func RenderSVG(root Node, opts RenderOptions) (string, error) {
 	return sb.String(), nil
 }
 
-func renderBoxVectorRecursive(sb *strings.Builder, box *Box, currentX, baselineY, emPx float64, fgColor string, defsMap map[string]GlyphInfo) {
+func renderBoxVectorRecursive(sb *strings.Builder, box *Box, currentX, baselineY, emPx float64, fgColor string, defsMap map[string]GlyphInfo, bounds *BBoxBounds) {
 	if box == nil {
 		return
 	}
@@ -156,29 +193,32 @@ func renderBoxVectorRecursive(sb *strings.Builder, box *Box, currentX, baselineY
 			glyph, ok := GetGlyphInfo(symStr)
 
 			if !ok {
-				// Fallback to text tag if glyph vector path not found
 				fontSize := emPx * box.Scale
 				escapedText := escapeXML(symStr)
 				sb.WriteString(fmt.Sprintf(`    <text x="%.2f" y="%.2f" fill="%s" font-size="%.2fpx" font-family="serif">%s</text>`,
 					curX, absY, fgColor, fontSize, escapedText))
 				sb.WriteString("\n")
-				curX += 0.55 * emPx * box.Scale
+
+				wPx := 0.55 * emPx * box.Scale
+				bounds.AddPoint(curX, absY-fontSize)
+				bounds.AddPoint(curX+wPx, absY)
+				curX += wPx
 				continue
 			}
 
-			// Add vector path to defs map
 			defsMap[glyph.ID] = glyph
-
-			// Calculate scale factor (1000 units = 1 em)
 			scaleFactor := (emPx / 1000.0) * box.Scale
 
-			// In SVG, TeX Y coordinates flip (MathJax path ascent is positive Y up)
 			sb.WriteString(fmt.Sprintf(`    <g transform="translate(%.2f, %.2f) scale(%.4f, -%.4f)">`,
 				curX, absY, scaleFactor, scaleFactor))
 			sb.WriteString(fmt.Sprintf(`      <use href="#%s"/>`, glyph.ID))
 			sb.WriteString("    </g>\n")
 
-			curX += (glyph.Width / 1000.0) * emPx * box.Scale
+			wPx := (glyph.Width / 1000.0) * emPx * box.Scale
+			bounds.AddPoint(curX, absY-0.75*emPx*box.Scale)
+			bounds.AddPoint(curX+wPx, absY+0.25*emPx*box.Scale)
+
+			curX += wPx
 		}
 
 	case "rule":
@@ -189,10 +229,13 @@ func renderBoxVectorRecursive(sb *strings.Builder, box *Box, currentX, baselineY
 		sb.WriteString(fmt.Sprintf(`    <rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" rx="0.5"/>`,
 			absX, ruleY, ruleW, ruleH))
 		sb.WriteString("\n")
+
+		bounds.AddPoint(absX, ruleY)
+		bounds.AddPoint(absX+ruleW, ruleY+ruleH)
 	}
 
 	for _, child := range box.Children {
-		renderBoxVectorRecursive(sb, child, absX, absY, emPx, fgColor, defsMap)
+		renderBoxVectorRecursive(sb, child, absX, absY, emPx, fgColor, defsMap, bounds)
 	}
 }
 

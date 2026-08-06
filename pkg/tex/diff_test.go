@@ -20,8 +20,7 @@ type BenchmarkFormula struct {
 type DiagnosticMetrics struct {
 	Name                string
 	GlyphVectorCoverage float64 // % of glyphs using exact MathJax TeX vector paths (0..100)
-	WidthRatio          float64 // Native Width / Oracle Width (1.0 = perfect match)
-	HeightRatio         float64 // Native Height / Oracle Height (1.0 = perfect match)
+	AspectWidthRatio    float64 // Native Aspect Ratio / Oracle Aspect Ratio (1.0 = perfect shape match)
 	BoundingBoxMatch    float64 // Aspect ratio & scale alignment score (0..100)
 	PixelSSIM           float64 // Structural Similarity Index of aligned content (0..100)
 	CompositeScore      float64 // Weighted overall score for hillclimbing (0..100)
@@ -43,7 +42,7 @@ func TestCompareWithMathJaxOracle(t *testing.T) {
 	fmt.Println("             STRUCTURED DIAGNOSTIC BENCHMARK: GO NATIVE vs MATHJAX ORACLE                 ")
 	fmt.Println("==========================================================================================")
 	fmt.Printf("%-12s | %-12s | %-12s | %-12s | %-12s | %-12s\n",
-		"Formula", "Glyph Cover", "BBox Match", "Width Ratio", "Pixel SSIM", "COMPOSITE")
+		"Formula", "Glyph Cover", "BBox Match", "Aspect Ratio", "Pixel SSIM", "COMPOSITE")
 	fmt.Println("------------------------------------------------------------------------------------------")
 
 	var totalComposite float64
@@ -87,7 +86,7 @@ func TestCompareWithMathJaxOracle(t *testing.T) {
 			metrics.Name,
 			metrics.GlyphVectorCoverage,
 			metrics.BoundingBoxMatch,
-			metrics.WidthRatio,
+			metrics.AspectWidthRatio,
 			metrics.PixelSSIM,
 			metrics.CompositeScore,
 		)
@@ -113,32 +112,27 @@ func ComputeDiagnosticMetrics(name, texStr, nativeSVG, oracleSVG string, nativeI
 	nw, nh := nativeBox.Dx(), nativeBox.Dy()
 	ow, oh := oracleBox.Dx(), oracleBox.Dy()
 
-	widthRatio := 0.0
-	heightRatio := 0.0
+	aspectRatio := 0.0
 	bboxMatch := 0.0
 
-	if ow > 0 && oh > 0 {
-		widthRatio = float64(nw) / float64(ow)
-		heightRatio = float64(nh) / float64(oh)
-
+	if ow > 0 && oh > 0 && nh > 0 {
 		aspectNative := float64(nw) / float64(nh)
 		aspectOracle := float64(ow) / float64(oh)
 
-		aspectMatch := math.Min(aspectNative, aspectOracle) / math.Max(aspectNative, aspectOracle)
-		sizeMatch := math.Min(float64(nw*nh), float64(ow*oh)) / math.Max(float64(nw*nh), float64(ow*oh))
+		aspectRatio = aspectNative / aspectOracle
 
-		bboxMatch = (aspectMatch*0.6 + sizeMatch*0.4) * 100.0
+		aspectMatch := math.Min(aspectNative, aspectOracle) / math.Max(aspectNative, aspectOracle)
+		bboxMatch = aspectMatch * 100.0
 	}
 
 	ssim := computeNormalizedSSIM(cropNative, cropOracle) * 100.0
 
-	composite := (bboxMatch * 0.35) + (ssim * 0.40) + (glyphCoverage * 0.25)
+	composite := (bboxMatch * 0.40) + (ssim * 0.35) + (glyphCoverage * 0.25)
 
 	return DiagnosticMetrics{
 		Name:                name,
 		GlyphVectorCoverage: glyphCoverage,
-		WidthRatio:          widthRatio,
-		HeightRatio:         heightRatio,
+		AspectWidthRatio:    aspectRatio,
 		BoundingBoxMatch:    bboxMatch,
 		PixelSSIM:           ssim,
 		CompositeScore:      composite,
