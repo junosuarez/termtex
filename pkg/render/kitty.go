@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // RenderToTerminal renders SVG to PNG and displays it as a block image in terminal.
@@ -28,16 +29,16 @@ func RenderToTerminal(svgContent string, writer io.Writer) error {
 
 // RenderInlineToTerminal renders SVG to PNG and displays it inline at current cursor position.
 func RenderInlineToTerminal(svgContent string, writer io.Writer) error {
-	pngBytes, err := convertSVGToPNG(svgContent, 2.0)
+	pngBytes, err := convertSVGToPNG(svgContent, 1.8)
 	if err != nil {
 		return err
 	}
 
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(pngBytes))
-	cols := 2
+	cols := 3
 	rows := 1
 	if err == nil && cfg.Width > 0 && cfg.Height > 0 {
-		cols = int(math.Max(1, math.Round(float64(cfg.Width)/9.5)))
+		cols = int(math.Max(2, math.Round(float64(cfg.Width)/9.5)))
 		rows = int(math.Max(1, math.Round(float64(cfg.Height)/20.0)))
 	}
 
@@ -98,7 +99,7 @@ func PrintKittyImage(w io.Writer, pngBytes []byte) error {
 	return nil
 }
 
-// PrintKittyInline outputs an inline PNG using C=1 to keep cursor on same line.
+// PrintKittyInline outputs an inline PNG using C=1 and advances cursor by cols spaces.
 func PrintKittyInline(w io.Writer, pngBytes []byte, cols, rows int) error {
 	encoded := base64.StdEncoding.EncodeToString(pngBytes)
 	chunkSize := 4096
@@ -119,6 +120,11 @@ func PrintKittyInline(w io.Writer, pngBytes []byte, cols, rows int) error {
 		} else {
 			fmt.Fprintf(w, "\x1b_Gm=%d;%s\x1b\\", m, chunk)
 		}
+	}
+
+	// Advance terminal cursor by cols spaces so subsequent text doesn't overlap image
+	if cols > 0 {
+		fmt.Fprint(w, strings.Repeat(" ", cols))
 	}
 
 	return nil
